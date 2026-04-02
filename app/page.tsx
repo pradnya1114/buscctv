@@ -34,7 +34,7 @@ export default function SmartBusCCTV() {
   const [activePlatform, setActivePlatform] = useState<number | null>(null);
   const [showSource, setShowSource] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const [showSettings, setShowSettings] = useState(false); // This now toggles via triple-tap
+  const [showSettings, setShowSettings] = useState(false);
   const [routeDb, setRouteDb] = useState<Record<string, { from: string; to: string }>>({});
   const [csvInput, setCsvInput] = useState('');
   const [cameraConfigs, setCameraConfigs] = useState<CameraConfig[]>(
@@ -53,87 +53,6 @@ export default function SmartBusCCTV() {
   const [useSarvam, setUseSarvam] = useState<boolean>(false);
   const [sarvamSpeaker, setSarvamSpeaker] = useState<string>('vidya');
   const [sarvamModel, setSarvamModel] = useState<string>('bulbul:v3');
-
-  // TRIPLE TAP DETECTION - Only toggles Settings panel (no admin buttons)
-  useEffect(() => {
-    let tapCount = 0;
-    let tapTimer: NodeJS.Timeout;
-    let lastTapPosition = { x: 0, y: 0 };
-    
-    const handleTripleTap = (e: MouseEvent | TouchEvent) => {
-      // Get tap/click position
-      let clientX, clientY;
-      if (e instanceof TouchEvent && e.touches.length > 0) {
-        clientX = e.touches[0].clientX;
-        clientY = e.touches[0].clientY;
-      } else if (e instanceof MouseEvent) {
-        clientX = e.clientX;
-        clientY = e.clientY;
-      } else {
-        return;
-      }
-      
-      // Check if tap is within 50px of last tap (for intentional triple tap)
-      const distance = Math.sqrt(
-        Math.pow(clientX - lastTapPosition.x, 2) + 
-        Math.pow(clientY - lastTapPosition.y, 2)
-      );
-      
-      // Reset if too far from last tap
-      if (distance > 50 && tapCount > 0) {
-        tapCount = 0;
-        if (tapTimer) clearTimeout(tapTimer);
-      }
-      
-      tapCount++;
-      lastTapPosition = { x: clientX, y: clientY };
-      
-      // Clear previous timer
-      if (tapTimer) clearTimeout(tapTimer);
-      
-      // Set timer to reset tap count after 500ms
-      tapTimer = setTimeout(() => {
-        if (tapCount === 3) {
-          // TRIPLE TAP DETECTED - Toggle ONLY settings panel (no admin buttons)
-          setShowSettings(prev => !prev);
-          
-          // Optional: Add haptic feedback on mobile
-          if (typeof window !== 'undefined' && 'vibrate' in navigator) {
-            navigator.vibrate(50);
-          }
-          
-          // Visual feedback (optional)
-          const indicator = document.createElement('div');
-          indicator.textContent = showSettings ? '⚙️ SETTINGS CLOSED' : '⚙️ SETTINGS OPEN';
-          indicator.style.position = 'fixed';
-          indicator.style.bottom = '100px';
-          indicator.style.left = '50%';
-          indicator.style.transform = 'translateX(-50%)';
-          indicator.style.backgroundColor = '#141414';
-          indicator.style.color = '#E4E3E0';
-          indicator.style.padding = '8px 16px';
-          indicator.style.borderRadius = '4px';
-          indicator.style.fontSize = '12px';
-          indicator.style.fontFamily = 'monospace';
-          indicator.style.zIndex = '9999';
-          indicator.style.pointerEvents = 'none';
-          document.body.appendChild(indicator);
-          setTimeout(() => indicator.remove(), 1500);
-        }
-        tapCount = 0;
-      }, 500);
-    };
-    
-    // Add event listeners for both mouse and touch
-    window.addEventListener('click', handleTripleTap);
-    window.addEventListener('touchstart', handleTripleTap);
-    
-    return () => {
-      window.removeEventListener('click', handleTripleTap);
-      window.removeEventListener('touchstart', handleTripleTap);
-      if (tapTimer) clearTimeout(tapTimer);
-    };
-  }, [showSettings]);
 
   useEffect(() => {
     const loadVoices = () => {
@@ -612,6 +531,37 @@ export default function SmartBusCCTV() {
               <Camera className={`w-4 h-4 ${isScanning && !autoScan ? 'animate-spin' : ''}`} />
               {isScanning && !autoScan ? 'SCANNING...' : 'SCAN ONCE'}
             </button>
+            
+            {/* SETTINGS BUTTON - Always visible on mobile and desktop */}
+            <button 
+              onClick={() => setShowSettings(!showSettings)}
+              className={`flex items-center gap-2 px-4 py-2 border border-[#141414] transition-colors font-mono text-xs ${showSettings ? 'bg-[#141414] text-[#E4E3E0]' : 'hover:bg-[#141414] hover:text-[#E4E3E0]'}`}
+            >
+              <Settings className="w-4 h-4" />
+              SETTINGS
+            </button>
+            
+            {/* CLEAR LOG button - Only visible when settings is open */}
+            {showSettings && (
+              <button 
+                onClick={() => setDetections([])}
+                className="flex items-center gap-2 px-4 py-2 border border-[#141414] hover:bg-red-600 hover:text-white transition-colors font-mono text-xs"
+              >
+                CLEAR LOG
+              </button>
+            )}
+            
+            {/* PYTHON SOURCE button - Only visible when settings is open */}
+            {showSettings && (
+              <button 
+                onClick={() => setShowSource(!showSource)}
+                className="flex items-center gap-2 px-4 py-2 border border-[#141414] hover:bg-[#141414] hover:text-[#E4E3E0] transition-colors font-mono text-xs"
+              >
+                <Code className="w-4 h-4" />
+                {showSource ? 'VIEW CCTV' : 'PYTHON SOURCE'}
+              </button>
+            )}
+            
             <button 
               onClick={() => setIsMuted(!isMuted)}
               className="p-2 border border-[#141414] hover:bg-[#141414] hover:text-[#E4E3E0] transition-colors"
@@ -665,7 +615,7 @@ export default function SmartBusCCTV() {
                 <h2 className="font-serif italic text-sm">Camera Configuration</h2>
                 <button 
                   onClick={() => setShowSettings(false)}
-                  className="text-[#141414] hover:opacity-50"
+                  className="text-[#141414] hover:opacity-50 text-xl"
                 >
                   ✕
                 </button>
