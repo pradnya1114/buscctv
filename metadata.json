@@ -1,0 +1,5 @@
+{
+  "name": "Smart Bus CCTV System",
+  "description": "A comprehensive multi-camera surveillance dashboard with ANPR, route mapping, and automated voice announcements.",
+  "requestFramePermissions": ["camera"]
+}
