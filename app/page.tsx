@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Camera, Bus, MapPin, Volume2, Code, Terminal, Activity, Shield, Settings, Maximize2 } from 'lucide-react';
+import { Camera, Bus, MapPin, Volume2, Code, Terminal, Activity, Shield, Settings, Maximize2, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Tesseract from 'tesseract.js';
 import CameraGrid from '@/components/CameraGrid';
@@ -55,26 +55,20 @@ export default function SmartBusCCTV() {
   const [sarvamModel, setSarvamModel] = useState<string>('bulbul:v3');
   const [cameraPermissionGranted, setCameraPermissionGranted] = useState(false);
   const [isRequestingPermission, setIsRequestingPermission] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Request camera permission on mobile
   const requestCameraPermission = async () => {
     setIsRequestingPermission(true);
     try {
-      // This triggers the permission prompt on mobile
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: true 
       });
-      
-      // Stop all tracks immediately after getting permission
       stream.getTracks().forEach(track => track.stop());
-      
       setCameraPermissionGranted(true);
-      
-      // Now enumerate devices
       const devices = await navigator.mediaDevices.enumerateDevices();
       const videoDevices = devices.filter(d => d.kind === 'videoinput');
       setAvailableDevices(videoDevices);
-      
       return true;
     } catch (err) {
       console.error("Camera permission denied:", err);
@@ -85,20 +79,16 @@ export default function SmartBusCCTV() {
     }
   };
 
-  // Fetch available devices - only works after permission
   const loadDevices = useCallback(async () => {
     if (typeof window !== 'undefined' && navigator.mediaDevices) {
       try {
-        // Check if we already have permission
         const devices = await navigator.mediaDevices.enumerateDevices();
         const videoDevices = devices.filter(d => d.kind === 'videoinput');
         
         if (videoDevices.length > 0 && videoDevices[0].label) {
-          // We have permission, devices have labels
           setAvailableDevices(videoDevices);
           setCameraPermissionGranted(true);
         } else {
-          // No permission yet, devices are hidden
           setAvailableDevices([]);
           setCameraPermissionGranted(false);
         }
@@ -109,18 +99,12 @@ export default function SmartBusCCTV() {
     }
   }, []);
 
-  // Handle camera selection for a platform
   const handleCameraSelect = async (platform: number, deviceId: string) => {
-    // Check if we have permission
     if (!cameraPermissionGranted) {
       const granted = await requestCameraPermission();
       if (!granted) return;
     }
-    
-    // Update the config
     updateCameraConfig(platform, { type: 'device', value: deviceId });
-    
-    // Test the camera feed
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { deviceId: { exact: deviceId } }
@@ -134,8 +118,6 @@ export default function SmartBusCCTV() {
 
   useEffect(() => {
     loadDevices();
-    
-    // Listen for device changes
     if (navigator.mediaDevices) {
       navigator.mediaDevices.addEventListener('devicechange', loadDevices);
       return () => {
@@ -469,7 +451,6 @@ export default function SmartBusCCTV() {
   useEffect(() => {
     const timer = setTimeout(() => {
       setMounted(true);
-      
       setDetections([{
         id: 'init',
         plate: 'SYSTEM_BOOT',
@@ -507,20 +488,27 @@ export default function SmartBusCCTV() {
   };
 
   return (
-    <div className="min-h-screen bg-[#E4E3E0] text-[#141414] font-sans selection:bg-[#141414] selection:text-[#E4E3E0]">
-      <header className="border-b border-[#141414] p-4 flex justify-between items-center bg-[#E4E3E0] sticky top-0 z-50">
-        <div className="flex items-center gap-3">
-          <div className="bg-[#141414] p-2 rounded-sm">
-            <Shield className="w-6 h-6 text-[#E4E3E0]" />
+    <div className="min-h-screen bg-[#E4E3E0] text-[#141414] font-sans selection:bg-[#141414] selection:text-[#E4E3E0] pb-8">
+      {/* Responsive Header */}
+      <header className="border-b border-[#141414] p-3 sm:p-4 bg-[#E4E3E0] sticky top-0 z-50">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {/* Logo Section - Responsive */}
+          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+            <div className="bg-[#141414] p-1.5 sm:p-2 rounded-sm">
+              <Shield className="w-4 h-4 sm:w-6 sm:h-6 text-[#E4E3E0]" />
+            </div>
+            <div className="hidden xs:block">
+              <h1 className="font-serif italic text-sm sm:text-xl leading-none">Smart Bus CCTV System</h1>
+              <p className="text-[8px] sm:text-[10px] uppercase tracking-widest opacity-50 font-mono">Multi-Platform Surveillance v2.4</p>
+            </div>
+            <div className="block xs:hidden">
+              <h1 className="font-serif italic text-xs leading-none">Smart Bus CCTV</h1>
+              <p className="text-[6px] uppercase tracking-widest opacity-50 font-mono">v2.4</p>
+            </div>
           </div>
-          <div>
-            <h1 className="font-serif italic text-xl leading-none">Smart Bus CCTV System</h1>
-            <p className="text-[10px] uppercase tracking-widest opacity-50 font-mono">Multi-Platform Surveillance v2.4</p>
-          </div>
-        </div>
 
-        <div className="flex items-center gap-6">
-          <div className="hidden md:flex items-center gap-4 font-mono text-[11px]">
+          {/* Desktop Status (Hidden on Mobile) */}
+          <div className="hidden lg:flex items-center gap-4 font-mono text-[11px]">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-green-600 animate-pulse" />
               <span>SYSTEM ACTIVE</span>
@@ -531,7 +519,9 @@ export default function SmartBusCCTV() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* Action Buttons - Responsive */}
+          <div className="flex items-center gap-1 sm:gap-2 flex-wrap justify-end">
+            {/* Test Voice Button - Hidden on very small screens */}
             <button 
               onClick={() => announce({
                 id: 'test',
@@ -542,84 +532,103 @@ export default function SmartBusCCTV() {
                 from: 'पुणे',
                 to: 'मुंबई'
               })}
-              className="flex items-center gap-2 px-4 py-2 border border-[#141414] hover:bg-[#141414] hover:text-[#E4E3E0] transition-colors font-mono text-xs"
+              className="hidden sm:flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1 sm:py-2 border border-[#141414] hover:bg-[#141414] hover:text-[#E4E3E0] transition-colors font-mono text-[10px] sm:text-xs"
             >
-              <Volume2 className="w-4 h-4" />
-              TEST MARATHI VOICE
+              <Volume2 className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span className="hidden md:inline">TEST VOICE</span>
             </button>
+
+            {/* Auto Scan Toggle */}
             <div className="flex flex-col items-end">
               <button 
                 onClick={() => setAutoScan(!autoScan)}
-                className={`flex items-center gap-2 px-4 py-2 border border-[#141414] transition-all font-mono text-xs ${autoScan ? 'bg-red-600 text-white border-red-600' : 'hover:bg-[#141414] hover:text-[#E4E3E0]'}`}
+                className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1 sm:py-2 border border-[#141414] transition-all font-mono text-[9px] sm:text-xs ${autoScan ? 'bg-red-600 text-white border-red-600' : 'hover:bg-[#141414] hover:text-[#E4E3E0]'}`}
               >
-                <Activity className={`w-4 h-4 ${autoScan ? 'animate-pulse' : ''}`} />
-                {autoScan ? 'AUTO SCAN: ON' : 'AUTO SCAN: OFF'}
+                <Activity className={`w-3 h-3 sm:w-4 sm:h-4 ${autoScan ? 'animate-pulse' : ''}`} />
+                <span className="hidden xs:inline">{autoScan ? 'AUTO: ON' : 'AUTO: OFF'}</span>
               </button>
-              {lastScanTime && (
-                <div className="flex flex-col items-end mt-1">
-                  <span className="text-[8px] font-mono opacity-40">
-                    LAST SCAN: {lastScanTime.toLocaleTimeString()}
-                  </span>
-                  {lastOcrResult && (
-                    <div className="flex flex-col items-end">
-                      <span className="text-[9px] font-mono text-red-600 font-bold">
-                        OCR: {lastOcrResult.slice(0, 15)}
-                      </span>
-                      <span className={`text-[8px] font-mono ${Object.keys(routeDb).some(p => lastOcrResult.includes(p.replace(/[^A-Z0-9]/g, ''))) ? 'text-green-600' : 'text-amber-600 opacity-50'}`}>
-                        {Object.keys(routeDb).some(p => lastOcrResult.includes(p.replace(/[^A-Z0-9]/g, ''))) ? '✓ DB MATCH FOUND' : '✗ NO DB MATCH'}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
+
+            {/* Scan Once Button */}
             <button 
               onClick={() => scanFeeds(false)}
               disabled={isScanning}
-              className={`flex items-center gap-2 px-4 py-2 border border-[#141414] transition-colors font-mono text-xs ${isScanning && !autoScan ? 'bg-[#141414] text-[#E4E3E0] animate-pulse' : 'hover:bg-[#141414] hover:text-[#E4E3E0]'}`}
+              className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1 sm:py-2 border border-[#141414] transition-colors font-mono text-[9px] sm:text-xs ${isScanning && !autoScan ? 'bg-[#141414] text-[#E4E3E0] animate-pulse' : 'hover:bg-[#141414] hover:text-[#E4E3E0]'}`}
             >
-              <Camera className={`w-4 h-4 ${isScanning && !autoScan ? 'animate-spin' : ''}`} />
-              {isScanning && !autoScan ? 'SCANNING...' : 'SCAN ONCE'}
+              <Camera className={`w-3 h-3 sm:w-4 sm:h-4 ${isScanning && !autoScan ? 'animate-spin' : ''}`} />
+              <span className="hidden xs:inline">{isScanning && !autoScan ? 'SCAN...' : 'SCAN'}</span>
             </button>
             
+            {/* Settings Button */}
             <button 
               onClick={() => setShowSettings(!showSettings)}
-              className={`flex items-center gap-2 px-4 py-2 border border-[#141414] transition-colors font-mono text-xs ${showSettings ? 'bg-[#141414] text-[#E4E3E0]' : 'hover:bg-[#141414] hover:text-[#E4E3E0]'}`}
+              className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1 sm:py-2 border border-[#141414] transition-colors font-mono text-[9px] sm:text-xs ${showSettings ? 'bg-[#141414] text-[#E4E3E0]' : 'hover:bg-[#141414] hover:text-[#E4E3E0]'}`}
             >
-              <Settings className="w-4 h-4" />
-              SETTINGS
+              <Settings className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">SETTINGS</span>
             </button>
             
+            {/* Extra buttons when settings open */}
             {showSettings && (
               <>
                 <button 
                   onClick={() => setDetections([])}
-                  className="flex items-center gap-2 px-4 py-2 border border-[#141414] hover:bg-red-600 hover:text-white transition-colors font-mono text-xs"
+                  className="hidden md:flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1 sm:py-2 border border-[#141414] hover:bg-red-600 hover:text-white transition-colors font-mono text-[9px] sm:text-xs"
                 >
                   CLEAR LOG
                 </button>
                 <button 
                   onClick={() => setShowSource(!showSource)}
-                  className="flex items-center gap-2 px-4 py-2 border border-[#141414] hover:bg-[#141414] hover:text-[#E4E3E0] transition-colors font-mono text-xs"
+                  className="hidden md:flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1 sm:py-2 border border-[#141414] hover:bg-[#141414] hover:text-[#E4E3E0] transition-colors font-mono text-[9px] sm:text-xs"
                 >
-                  <Code className="w-4 h-4" />
-                  {showSource ? 'VIEW CCTV' : 'PYTHON SOURCE'}
+                  <Code className="w-3 h-3 sm:w-4 sm:h-4" />
+                  <span className="hidden lg:inline">{showSource ? 'VIEW CCTV' : 'SOURCE'}</span>
                 </button>
               </>
             )}
             
+            {/* Mute Button */}
             <button 
               onClick={() => setIsMuted(!isMuted)}
-              className="p-2 border border-[#141414] hover:bg-[#141414] hover:text-[#E4E3E0] transition-colors"
+              className="p-1.5 sm:p-2 border border-[#141414] hover:bg-[#141414] hover:text-[#E4E3E0] transition-colors"
             >
-              <Volume2 className={`w-4 h-4 ${isMuted ? 'opacity-30' : ''}`} />
+              <Volume2 className={`w-3 h-3 sm:w-4 sm:h-4 ${isMuted ? 'opacity-30' : ''}`} />
             </button>
           </div>
         </div>
+
+        {/* Mobile Status Bar */}
+        <div className="flex lg:hidden justify-between items-center mt-2 pt-2 border-t border-[#141414]/20 text-[8px] font-mono">
+          <div className="flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-600 animate-pulse" />
+            <span>SYSTEM ACTIVE</span>
+          </div>
+          <div className="flex items-center gap-2 opacity-50">
+            <Activity className="w-2 h-2" />
+            <span>CPU: 12%</span>
+          </div>
+          {lastScanTime && (
+            <span className="opacity-40">
+              LAST: {lastScanTime.toLocaleTimeString()}
+            </span>
+          )}
+        </div>
+
+        {/* OCR Result Mobile */}
+        {lastOcrResult && (
+          <div className="flex lg:hidden justify-between items-center mt-1 text-[7px] font-mono">
+            <span className="text-red-600 font-bold">OCR: {lastOcrResult.slice(0, 12)}</span>
+            <span className={Object.keys(routeDb).some(p => lastOcrResult.includes(p.replace(/[^A-Z0-9]/g, ''))) ? 'text-green-600' : 'text-amber-600'}>
+              {Object.keys(routeDb).some(p => lastOcrResult.includes(p.replace(/[^A-Z0-9]/g, ''))) ? '✓ MATCH' : '✗ NO MATCH'}
+            </span>
+          </div>
+        )}
       </header>
 
-      <main className="p-4 grid grid-cols-1 lg:grid-cols-12 gap-4">
-        <div className="lg:col-span-8 space-y-4">
+      {/* Main Content - Responsive Grid */}
+      <main className="p-2 sm:p-4 grid grid-cols-1 lg:grid-cols-12 gap-2 sm:gap-4">
+        {/* Left Column: Camera Grid or Source */}
+        <div className="lg:col-span-8 space-y-2 sm:space-y-4">
           <AnimatePresence mode="wait">
             {showSource ? (
               <motion.div
@@ -627,7 +636,7 @@ export default function SmartBusCCTV() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="h-[calc(100vh-140px)]"
+                className="h-[50vh] sm:h-[calc(100vh-180px)]"
               >
                 <PythonSource />
               </motion.div>
@@ -648,35 +657,36 @@ export default function SmartBusCCTV() {
           </AnimatePresence>
         </div>
 
-        <div className="lg:col-span-4 space-y-4">
+        {/* Right Column: Logs & Settings - Responsive */}
+        <div className="lg:col-span-4 space-y-2 sm:space-y-4">
           {showSettings ? (
             <motion.div 
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
-              className="border border-[#141414] p-4 bg-white/50 backdrop-blur-sm h-[calc(100vh-140px)] overflow-y-auto custom-scrollbar"
+              className="border border-[#141414] p-3 sm:p-4 bg-white/50 backdrop-blur-sm h-auto lg:h-[calc(100vh-140px)] overflow-y-auto custom-scrollbar"
             >
-              <div className="flex items-center justify-between mb-4 border-b border-[#141414] pb-2">
-                <h2 className="font-serif italic text-sm">Camera Configuration</h2>
+              <div className="flex items-center justify-between mb-3 sm:mb-4 border-b border-[#141414] pb-2">
+                <h2 className="font-serif italic text-sm sm:text-base">Settings</h2>
                 <button 
                   onClick={() => setShowSettings(false)}
-                  className="text-[#141414] hover:opacity-50 text-xl"
+                  className="text-[#141414] hover:opacity-50 p-1"
                 >
-                  ✕
+                  <X className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>
               </div>
               
-              <div className="space-y-6">
+              <div className="space-y-4 sm:space-y-6">
                 {/* Camera Permission Button for Mobile */}
                 {!cameraPermissionGranted && (
-                  <div className="space-y-3 border-b border-[#141414] pb-6">
-                    <div className="bg-amber-50 border border-amber-500 p-3 rounded">
-                      <p className="text-[10px] font-mono text-amber-800 mb-2">
+                  <div className="space-y-2 border-b border-[#141414] pb-4 sm:pb-6">
+                    <div className="bg-amber-50 border border-amber-500 p-2 sm:p-3 rounded">
+                      <p className="text-[9px] sm:text-[10px] font-mono text-amber-800 mb-2">
                         ⚠️ Camera permission required to select devices
                       </p>
                       <button
                         onClick={requestCameraPermission}
                         disabled={isRequestingPermission}
-                        className="w-full bg-[#141414] text-[#E4E3E0] py-2 font-mono text-[10px] uppercase tracking-widest hover:bg-black transition-colors"
+                        className="w-full bg-[#141414] text-[#E4E3E0] py-1.5 sm:py-2 font-mono text-[9px] sm:text-[10px] uppercase tracking-widest hover:bg-black transition-colors"
                       >
                         {isRequestingPermission ? 'REQUESTING...' : 'ALLOW CAMERA ACCESS'}
                       </button>
@@ -684,16 +694,16 @@ export default function SmartBusCCTV() {
                   </div>
                 )}
 
-                {/* Voice Selection Section */}
-                <div className="space-y-3 border-b border-[#141414] pb-6">
+                {/* Voice Selection Section - Responsive */}
+                <div className="space-y-2 sm:space-y-3 border-b border-[#141414] pb-4 sm:pb-6">
                   <div className="flex items-center justify-between">
-                    <h3 className="font-mono text-[10px] font-bold uppercase tracking-widest">Announcement Voice</h3>
+                    <h3 className="font-mono text-[9px] sm:text-[10px] font-bold uppercase tracking-widest">Announcement Voice</h3>
                     <Volume2 className="w-3 h-3 opacity-50" />
                   </div>
                   
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between bg-white border border-[#141414] p-2">
-                      <label className="text-[10px] font-mono font-bold uppercase">Use Sarvam AI (High Quality)</label>
+                  <div className="space-y-3 sm:space-y-4">
+                    <div className="flex items-center justify-between bg-white border border-[#141414] p-1.5 sm:p-2">
+                      <label className="text-[9px] sm:text-[10px] font-mono font-bold uppercase">Use Sarvam AI</label>
                       <input 
                         type="checkbox" 
                         checked={useSarvam}
@@ -701,14 +711,14 @@ export default function SmartBusCCTV() {
                           setUseSarvam(e.target.checked);
                           localStorage.setItem('smart_bus_use_sarvam', e.target.checked.toString());
                         }}
-                        className="w-4 h-4 accent-[#141414]"
+                        className="w-3 h-3 sm:w-4 sm:h-4 accent-[#141414]"
                       />
                     </div>
 
                     {useSarvam && (
                       <div className="space-y-2">
                         <div className="space-y-1">
-                          <label className="text-[9px] font-mono uppercase opacity-60">Sarvam API Key</label>
+                          <label className="text-[8px] sm:text-[9px] font-mono uppercase opacity-60">Sarvam API Key</label>
                           <input 
                             type="password"
                             value={sarvamApiKey}
@@ -717,22 +727,22 @@ export default function SmartBusCCTV() {
                               localStorage.setItem('smart_bus_sarvam_key', e.target.value);
                             }}
                             placeholder="Enter Sarvam AI API Key"
-                            className="w-full bg-white border border-[#141414] text-[10px] font-mono px-2 py-2"
+                            className="w-full bg-white border border-[#141414] text-[9px] sm:text-[10px] font-mono px-2 py-1.5 sm:py-2"
                           />
                         </div>
                         
                         <div className="space-y-1">
-                          <label className="text-[9px] font-mono uppercase opacity-60">Sarvam Speaker</label>
+                          <label className="text-[8px] sm:text-[9px] font-mono uppercase opacity-60">Speaker</label>
                           <select 
                             value={sarvamSpeaker}
                             onChange={(e) => {
                               setSarvamSpeaker(e.target.value);
                               localStorage.setItem('smart_bus_sarvam_speaker', e.target.value);
                             }}
-                            className="w-full bg-white border border-[#141414] text-[10px] font-mono px-2 py-2"
+                            className="w-full bg-white border border-[#141414] text-[9px] sm:text-[10px] font-mono px-2 py-1.5 sm:py-2"
                           >
                             <option value="vidya">Vidya (Marathi Female)</option>
-                            <option value="anushka">Anushka (Hindi/Marathi Female)</option>
+                            <option value="anushka">Anushka (Hindi/Marathi)</option>
                             <option value="ritu">Ritu (Female)</option>
                             <option value="priya">Priya (Female)</option>
                             <option value="neha">Neha (Female)</option>
@@ -743,21 +753,20 @@ export default function SmartBusCCTV() {
                         </div>
 
                         <div className="space-y-1">
-                          <label className="text-[9px] font-mono uppercase opacity-60">Sarvam Model</label>
+                          <label className="text-[8px] sm:text-[9px] font-mono uppercase opacity-60">Model</label>
                           <select 
                             value={sarvamModel}
                             onChange={(e) => {
                               setSarvamModel(e.target.value);
                               localStorage.setItem('smart_bus_sarvam_model', e.target.value);
                             }}
-                            className="w-full bg-white border border-[#141414] text-[10px] font-mono px-2 py-2"
+                            className="w-full bg-white border border-[#141414] text-[9px] sm:text-[10px] font-mono px-2 py-1.5 sm:py-2"
                           >
                             <option value="bulbul:v3">Bulbul v3 (Latest)</option>
                             <option value="bulbul:v2">Bulbul v2</option>
                             <option value="bulbul:v3-beta">Bulbul v3-beta</option>
                           </select>
                         </div>
-                        <p className="text-[8px] opacity-50 font-mono">Get your key from api.sarvam.ai</p>
                       </div>
                     )}
 
@@ -769,10 +778,10 @@ export default function SmartBusCCTV() {
                             setSelectedVoiceURI(e.target.value);
                             localStorage.setItem('smart_bus_voice', e.target.value);
                           }}
-                          className="w-full bg-white border border-[#141414] text-[10px] font-mono px-2 py-2"
+                          className="w-full bg-white border border-[#141414] text-[9px] sm:text-[10px] font-mono px-2 py-1.5 sm:py-2"
                         >
                           <option value="">DEFAULT MARATHI</option>
-                          {availableVoices.map(voice => (
+                          {availableVoices.slice(0, 10).map(voice => (
                             <option key={voice.voiceURI} value={voice.voiceURI}>
                               {voice.name} ({voice.lang})
                             </option>
@@ -781,9 +790,9 @@ export default function SmartBusCCTV() {
                       </div>
                     )}
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-2 gap-3 sm:gap-4">
                       <div className="space-y-1">
-                        <label className="text-[9px] font-mono uppercase opacity-60">Speed: {voiceRate.toFixed(1)}</label>
+                        <label className="text-[8px] sm:text-[9px] font-mono uppercase opacity-60">Speed: {voiceRate.toFixed(1)}</label>
                         <input 
                           type="range" min="0.5" max="2" step="0.1"
                           value={voiceRate}
@@ -796,7 +805,7 @@ export default function SmartBusCCTV() {
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[9px] font-mono uppercase opacity-60">Pitch: {voicePitch.toFixed(1)}</label>
+                        <label className="text-[8px] sm:text-[9px] font-mono uppercase opacity-60">Pitch: {voicePitch.toFixed(1)}</label>
                         <input 
                           type="range" min="0.5" max="2" step="0.1"
                           value={voicePitch}
@@ -810,32 +819,29 @@ export default function SmartBusCCTV() {
                       </div>
                     </div>
                   </div>
-                  <p className="text-[9px] opacity-60 font-mono italic">
-                    Tip: Sarvam AI provides high-quality Indian voices. Browser TTS is free but lower quality.
-                  </p>
                 </div>
 
-                {/* CSV Import Section */}
-                <div className="space-y-3 border-b border-[#141414] pb-6">
+                {/* CSV Import Section - Responsive */}
+                <div className="space-y-2 sm:space-y-3 border-b border-[#141414] pb-4 sm:pb-6">
                   <div className="flex items-center justify-between">
-                    <h3 className="font-mono text-[10px] font-bold uppercase tracking-widest">Bulk Route Import</h3>
+                    <h3 className="font-mono text-[9px] sm:text-[10px] font-bold uppercase tracking-widest">Bulk Route Import</h3>
                     <Bus className="w-3 h-3 opacity-50" />
                   </div>
-                  <p className="text-[9px] opacity-60 font-mono">Paste CSV data: PLATE, FROM, TO (one per line)</p>
+                  <p className="text-[8px] sm:text-[9px] opacity-60 font-mono">Paste CSV data: PLATE, FROM, TO</p>
                   <textarea 
                     value={csvInput}
                     onChange={(e) => setCsvInput(e.target.value)}
                     placeholder="MH12AB1234, Pune, Mumbai&#10;MH14CD5678, Nashik, Aurangabad"
-                    className="w-full h-24 bg-white border border-[#141414] text-[10px] font-mono p-2 resize-none"
+                    className="w-full h-20 sm:h-24 bg-white border border-[#141414] text-[9px] sm:text-[10px] font-mono p-2 resize-none"
                   />
                   <button 
                     onClick={handleCsvImport}
-                    className="w-full bg-[#141414] text-[#E4E3E0] py-2 font-mono text-[10px] uppercase tracking-widest hover:bg-black transition-colors"
+                    className="w-full bg-[#141414] text-[#E4E3E0] py-1.5 sm:py-2 font-mono text-[9px] sm:text-[10px] uppercase tracking-widest hover:bg-black transition-colors"
                   >
                     IMPORT ROUTES
                   </button>
-                  <div className="flex justify-between items-center text-[9px] font-mono">
-                    <p className="opacity-40 italic">Currently loaded: {Object.keys(routeDb).length} routes</p>
+                  <div className="flex flex-wrap justify-between items-center gap-2 text-[8px] sm:text-[9px] font-mono">
+                    <p className="opacity-40 italic">Routes: {Object.keys(routeDb).length}</p>
                     <button 
                       onClick={() => loadRoutes()}
                       className="text-blue-600 hover:underline font-bold"
@@ -843,96 +849,96 @@ export default function SmartBusCCTV() {
                       RELOAD CSV
                     </button>
                     <p className={Object.keys(routeDb).length > 0 ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
-                      {Object.keys(routeDb).length > 0 ? "✓ BACKEND DATA LOADED" : "✗ NO BACKEND DATA"}
+                      {Object.keys(routeDb).length > 0 ? "✓ DATA LOADED" : "✗ NO DATA"}
                     </p>
                   </div>
                   <a 
                     href="/api/log" 
                     download 
-                    className="w-full border border-[#141414] text-[#141414] py-2 font-mono text-[10px] uppercase tracking-widest hover:bg-[#141414] hover:text-[#E4E3E0] transition-colors text-center block"
+                    className="w-full border border-[#141414] text-[#141414] py-1.5 sm:py-2 font-mono text-[9px] sm:text-[10px] uppercase tracking-widest hover:bg-[#141414] hover:text-[#E4E3E0] transition-colors text-center block"
                   >
-                    DOWNLOAD DETECTIONS LOG (CSV)
+                    DOWNLOAD LOG (CSV)
                   </a>
                 </div>
 
-                {cameraConfigs.map((config) => (
-                  <div key={config.platform} className="space-y-2 border-b border-[#141414]/10 pb-4">
-                    <div className="flex items-center justify-between">
-                      <span className="font-mono text-[10px] font-bold uppercase tracking-widest">Platform {config.platform}</span>
-                      <select 
-                        value={config.type}
-                        onChange={(e) => updateCameraConfig(config.platform, { type: e.target.value as any, value: '' })}
-                        className="bg-transparent border border-[#141414] text-[10px] font-mono px-2 py-1"
-                      >
-                        <option value="none">DISABLED</option>
-                        <option value="device">HARDWARE DEVICE</option>
-                        <option value="url">IP CAMERA URL</option>
-                      </select>
-                    </div>
-
-                    {config.type === 'device' && (
-                      <div className="space-y-1">
-                        {availableDevices.length === 0 ? (
-                          <div className="bg-amber-50 border border-amber-500 p-2 rounded">
-                            <p className="text-[9px] font-mono text-amber-800">
-                              No cameras found. Click "ALLOW CAMERA ACCESS" above first.
-                            </p>
-                          </div>
-                        ) : (
-                          <select 
-                            value={config.value}
-                            onChange={(e) => handleCameraSelect(config.platform, e.target.value)}
-                            className="w-full bg-white border border-[#141414] text-[10px] font-mono px-2 py-2"
-                          >
-                            <option value="">SELECT CAMERA...</option>
-                            {availableDevices.map(device => (
-                              <option key={device.deviceId} value={device.deviceId}>
-                                {device.label || `Camera ${device.deviceId.slice(0, 10)}...`}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                        {config.value && cameraConfigs.filter(c => c.type === 'device' && c.value === config.value).length > 1 && (
-                          <p className="text-[9px] text-amber-600 font-mono leading-tight">
-                            ⚠️ This camera is already in use by another platform.
-                          </p>
-                        )}
+                {/* Camera Configs - Responsive Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  {cameraConfigs.map((config) => (
+                    <div key={config.platform} className="space-y-2 border-b border-[#141414]/10 pb-3">
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-[9px] sm:text-[10px] font-bold uppercase">P{config.platform}</span>
+                        <select 
+                          value={config.type}
+                          onChange={(e) => updateCameraConfig(config.platform, { type: e.target.value as any, value: '' })}
+                          className="bg-transparent border border-[#141414] text-[8px] sm:text-[9px] font-mono px-1 sm:px-2 py-0.5 sm:py-1"
+                        >
+                          <option value="none">OFF</option>
+                          <option value="device">CAM</option>
+                          <option value="url">IP</option>
+                        </select>
                       </div>
-                    )}
 
-                    {config.type === 'url' && (
-                      <input 
-                        type="text"
-                        placeholder="http://ip-address:port/video"
-                        value={config.value}
-                        onChange={(e) => updateCameraConfig(config.platform, { value: e.target.value })}
-                        className="w-full bg-white border border-[#141414] text-[10px] font-mono px-2 py-2"
-                      />
-                    )}
-                  </div>
-                ))}
+                      {config.type === 'device' && (
+                        <div className="space-y-1">
+                          {availableDevices.length === 0 ? (
+                            <div className="bg-amber-50 border border-amber-500 p-1.5 rounded">
+                              <p className="text-[7px] sm:text-[8px] font-mono text-amber-800">
+                                Allow camera access first
+                              </p>
+                            </div>
+                          ) : (
+                            <select 
+                              value={config.value}
+                              onChange={(e) => handleCameraSelect(config.platform, e.target.value)}
+                              className="w-full bg-white border border-[#141414] text-[8px] sm:text-[9px] font-mono px-1.5 py-1.5"
+                            >
+                              <option value="">SELECT...</option>
+                              {availableDevices.slice(0, 3).map(device => (
+                                <option key={device.deviceId} value={device.deviceId}>
+                                  {device.label?.slice(0, 20) || `Cam ${device.deviceId.slice(0, 5)}`}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
+                      )}
+
+                      {config.type === 'url' && (
+                        <input 
+                          type="text"
+                          placeholder="http://ip:port/video"
+                          value={config.value}
+                          onChange={(e) => updateCameraConfig(config.platform, { value: e.target.value })}
+                          className="w-full bg-white border border-[#141414] text-[8px] sm:text-[9px] font-mono px-1.5 py-1.5"
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             </motion.div>
           ) : (
             <>
-              <div className="border border-[#141414] p-4 bg-white/50 backdrop-blur-sm">
-                <div className="flex items-center justify-between mb-4 border-b border-[#141414] pb-2">
-                  <h2 className="font-serif italic text-sm">Real-time Detection Log</h2>
+              {/* Detection Log - Responsive */}
+              <div className="border border-[#141414] p-2 sm:p-4 bg-white/50 backdrop-blur-sm">
+                <div className="flex items-center justify-between mb-2 sm:mb-4 border-b border-[#141414] pb-2">
+                  <h2 className="font-serif italic text-xs sm:text-sm">Detection Log</h2>
                   <Terminal className="w-3 h-3 opacity-50" />
                 </div>
                 <DetectionLog detections={detections} />
               </div>
 
-              <div className="border border-[#141414] p-4 bg-[#141414] text-[#E4E3E0]">
-                <h3 className="font-mono text-[10px] uppercase tracking-widest mb-4 opacity-70">Platform Status</h3>
-                <div className="grid grid-cols-5 gap-2">
+              {/* Platform Status - Responsive Grid */}
+              <div className="border border-[#141414] p-3 sm:p-4 bg-[#141414] text-[#E4E3E0]">
+                <h3 className="font-mono text-[8px] sm:text-[10px] uppercase tracking-widest mb-2 sm:mb-4 opacity-70">Platform Status</h3>
+                <div className="grid grid-cols-5 gap-1 sm:gap-2">
                   {Array.from({ length: 10 }).map((_, i) => (
                     <div 
                       key={i} 
-                      className={`aspect-square border border-[#E4E3E0]/20 flex flex-col items-center justify-center gap-1 transition-colors ${activePlatform === i + 1 ? 'bg-green-600 border-green-400' : ''}`}
+                      className={`aspect-square border border-[#E4E3E0]/20 flex flex-col items-center justify-center gap-0.5 sm:gap-1 transition-colors ${activePlatform === i + 1 ? 'bg-green-600 border-green-400' : ''}`}
                     >
-                      <span className="text-[10px] font-mono">P{i + 1}</span>
-                      <div className={`w-1 h-1 rounded-full ${activePlatform === i + 1 ? 'bg-white' : 'bg-green-500'}`} />
+                      <span className="text-[8px] sm:text-[10px] font-mono">P{i + 1}</span>
+                      <div className={`w-0.5 h-0.5 sm:w-1 sm:h-1 rounded-full ${activePlatform === i + 1 ? 'bg-white' : 'bg-green-500'}`} />
                     </div>
                   ))}
                 </div>
@@ -942,16 +948,17 @@ export default function SmartBusCCTV() {
         </div>
       </main>
 
-      <footer className="fixed bottom-0 w-full border-t border-[#141414] bg-[#E4E3E0] px-4 py-1 flex justify-between items-center font-mono text-[9px] uppercase tracking-tighter opacity-70">
-        <div className="flex gap-4">
+      {/* Responsive Footer */}
+      <footer className="fixed bottom-0 w-full border-t border-[#141414] bg-[#E4E3E0] px-2 sm:px-4 py-1 flex justify-between items-center font-mono text-[7px] sm:text-[9px] uppercase tracking-tighter opacity-70">
+        <div className="flex gap-2 sm:gap-4">
           <span>LATENCY: 42MS</span>
-          <span>STORAGE: 84% FREE</span>
-          <span>CAMERAS: 10/10 ONLINE</span>
+          <span className="hidden xs:inline">STORAGE: 84% FREE</span>
+          <span>CAMERAS: 10/10</span>
         </div>
-        <div className="flex gap-4">
+        <div className="flex gap-2 sm:gap-4">
           {mounted && (
             <>
-              <span>{new Date().toLocaleDateString()}</span>
+              <span className="hidden xs:inline">{new Date().toLocaleDateString()}</span>
               <span>{new Date().toLocaleTimeString()}</span>
             </>
           )}
