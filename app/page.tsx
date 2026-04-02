@@ -55,16 +55,96 @@ export default function SmartBusCCTV() {
   const [sarvamModel, setSarvamModel] = useState<string>('bulbul:v3');
   const [showAdminControls, setShowAdminControls] = useState(false);
 
+  // TRIPLE TAP DETECTION - Works on both desktop and mobile!
   useEffect(() => {
+    let tapCount = 0;
+    let tapTimer: NodeJS.Timeout;
+    let lastTapPosition = { x: 0, y: 0 };
+    
+    const handleTripleTap = (e: MouseEvent | TouchEvent) => {
+      // Get tap/click position
+      let clientX, clientY;
+      if (e instanceof TouchEvent && e.touches.length > 0) {
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+      } else if (e instanceof MouseEvent) {
+        clientX = e.clientX;
+        clientY = e.clientY;
+      } else {
+        return;
+      }
+      
+      // Check if tap is within 50px of last tap (for intentional triple tap)
+      const distance = Math.sqrt(
+        Math.pow(clientX - lastTapPosition.x, 2) + 
+        Math.pow(clientY - lastTapPosition.y, 2)
+      );
+      
+      // Reset if too far from last tap
+      if (distance > 50 && tapCount > 0) {
+        tapCount = 0;
+        if (tapTimer) clearTimeout(tapTimer);
+      }
+      
+      tapCount++;
+      lastTapPosition = { x: clientX, y: clientY };
+      
+      // Clear previous timer
+      if (tapTimer) clearTimeout(tapTimer);
+      
+      // Set timer to reset tap count after 500ms
+      tapTimer = setTimeout(() => {
+        if (tapCount === 3) {
+          // TRIPLE TAP DETECTED - Toggle admin controls!
+          setShowAdminControls(prev => !prev);
+          
+          // Optional: Add haptic feedback on mobile
+          if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+            navigator.vibrate(50);
+          }
+          
+          // Visual feedback (optional)
+          const indicator = document.createElement('div');
+          indicator.textContent = '🔧 ADMIN MODE ' + (!showAdminControls ? 'ON' : 'OFF');
+          indicator.style.position = 'fixed';
+          indicator.style.bottom = '100px';
+          indicator.style.left = '50%';
+          indicator.style.transform = 'translateX(-50%)';
+          indicator.style.backgroundColor = '#141414';
+          indicator.style.color = '#E4E3E0';
+          indicator.style.padding = '8px 16px';
+          indicator.style.borderRadius = '4px';
+          indicator.style.fontSize = '12px';
+          indicator.style.fontFamily = 'monospace';
+          indicator.style.zIndex = '9999';
+          indicator.style.pointerEvents = 'none';
+          document.body.appendChild(indicator);
+          setTimeout(() => indicator.remove(), 1500);
+        }
+        tapCount = 0;
+      }, 500);
+    };
+    
+    // Also support keyboard '1' key
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === '1') {
         setShowAdminControls(prev => !prev);
+        e.preventDefault();
       }
     };
-
+    
+    // Add event listeners for both mouse and touch
+    window.addEventListener('click', handleTripleTap);
+    window.addEventListener('touchstart', handleTripleTap);
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+    
+    return () => {
+      window.removeEventListener('click', handleTripleTap);
+      window.removeEventListener('touchstart', handleTripleTap);
+      window.removeEventListener('keydown', handleKeyDown);
+      if (tapTimer) clearTimeout(tapTimer);
+    };
+  }, [showAdminControls]);
 
   useEffect(() => {
     const loadVoices = () => {
@@ -889,6 +969,13 @@ export default function SmartBusCCTV() {
           )}
         </div>
       </footer>
+      
+      {/* Visual hint for mobile users (optional - remove if you want it hidden) */}
+      <div className="fixed bottom-20 right-4 opacity-30 md:hidden">
+        <div className="bg-[#141414] text-[#E4E3E0] text-[8px] px-2 py-1 rounded font-mono">
+          Triple tap anywhere
+        </div>
+      </div>
     </div>
   );
 }
