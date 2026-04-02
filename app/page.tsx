@@ -34,7 +34,7 @@ export default function SmartBusCCTV() {
   const [activePlatform, setActivePlatform] = useState<number | null>(null);
   const [showSource, setShowSource] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
+  const [showSettings, setShowSettings] = useState(false); // This now toggles via triple-tap
   const [routeDb, setRouteDb] = useState<Record<string, { from: string; to: string }>>({});
   const [csvInput, setCsvInput] = useState('');
   const [cameraConfigs, setCameraConfigs] = useState<CameraConfig[]>(
@@ -53,9 +53,8 @@ export default function SmartBusCCTV() {
   const [useSarvam, setUseSarvam] = useState<boolean>(false);
   const [sarvamSpeaker, setSarvamSpeaker] = useState<string>('vidya');
   const [sarvamModel, setSarvamModel] = useState<string>('bulbul:v3');
-  const [showAdminControls, setShowAdminControls] = useState(false);
 
-  // TRIPLE TAP DETECTION - Works on both desktop and mobile!
+  // TRIPLE TAP DETECTION - Only toggles Settings panel (no admin buttons)
   useEffect(() => {
     let tapCount = 0;
     let tapTimer: NodeJS.Timeout;
@@ -95,8 +94,8 @@ export default function SmartBusCCTV() {
       // Set timer to reset tap count after 500ms
       tapTimer = setTimeout(() => {
         if (tapCount === 3) {
-          // TRIPLE TAP DETECTED - Toggle admin controls!
-          setShowAdminControls(prev => !prev);
+          // TRIPLE TAP DETECTED - Toggle ONLY settings panel (no admin buttons)
+          setShowSettings(prev => !prev);
           
           // Optional: Add haptic feedback on mobile
           if (typeof window !== 'undefined' && 'vibrate' in navigator) {
@@ -105,7 +104,7 @@ export default function SmartBusCCTV() {
           
           // Visual feedback (optional)
           const indicator = document.createElement('div');
-          indicator.textContent = '🔧 ADMIN MODE ' + (!showAdminControls ? 'ON' : 'OFF');
+          indicator.textContent = showSettings ? '⚙️ SETTINGS CLOSED' : '⚙️ SETTINGS OPEN';
           indicator.style.position = 'fixed';
           indicator.style.bottom = '100px';
           indicator.style.left = '50%';
@@ -125,26 +124,16 @@ export default function SmartBusCCTV() {
       }, 500);
     };
     
-    // Also support keyboard '1' key
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === '1') {
-        setShowAdminControls(prev => !prev);
-        e.preventDefault();
-      }
-    };
-    
     // Add event listeners for both mouse and touch
     window.addEventListener('click', handleTripleTap);
     window.addEventListener('touchstart', handleTripleTap);
-    window.addEventListener('keydown', handleKeyDown);
     
     return () => {
       window.removeEventListener('click', handleTripleTap);
       window.removeEventListener('touchstart', handleTripleTap);
-      window.removeEventListener('keydown', handleKeyDown);
       if (tapTimer) clearTimeout(tapTimer);
     };
-  }, [showAdminControls]);
+  }, [showSettings]);
 
   useEffect(() => {
     const loadVoices = () => {
@@ -504,9 +493,6 @@ export default function SmartBusCCTV() {
     }
   }, [isScanning, routeDb, announce, lastDetectedPlates, handleBusDeparture]);
 
-  // Simulation Logic - REMOVED to prevent false detections
-  // const triggerDetection = useCallback((silent = false) => { ... });
-
   useEffect(() => {
     // Use setTimeout to avoid synchronous setState in effect (cascading renders)
     const timer = setTimeout(() => {
@@ -626,29 +612,6 @@ export default function SmartBusCCTV() {
               <Camera className={`w-4 h-4 ${isScanning && !autoScan ? 'animate-spin' : ''}`} />
               {isScanning && !autoScan ? 'SCANNING...' : 'SCAN ONCE'}
             </button>
-            {showAdminControls && (
-              <>
-                <button 
-                  onClick={() => setDetections([])}
-                  className="flex items-center gap-2 px-4 py-2 border border-[#141414] hover:bg-red-600 hover:text-white transition-colors font-mono text-xs"
-                >
-                  CLEAR LOG
-                </button>
-                <button 
-                  onClick={() => setShowSettings(!showSettings)}
-                  className={`p-2 border border-[#141414] transition-colors ${showSettings ? 'bg-[#141414] text-[#E4E3E0]' : 'hover:bg-[#141414] hover:text-[#E4E3E0]'}`}
-                >
-                  <Settings className="w-4 h-4" />
-                </button>
-                <button 
-                  onClick={() => setShowSource(!showSource)}
-                  className="flex items-center gap-2 px-4 py-2 border border-[#141414] hover:bg-[#141414] hover:text-[#E4E3E0] transition-colors font-mono text-xs"
-                >
-                  <Code className="w-4 h-4" />
-                  {showSource ? 'VIEW CCTV' : 'PYTHON SOURCE'}
-                </button>
-              </>
-            )}
             <button 
               onClick={() => setIsMuted(!isMuted)}
               className="p-2 border border-[#141414] hover:bg-[#141414] hover:text-[#E4E3E0] transition-colors"
@@ -700,7 +663,12 @@ export default function SmartBusCCTV() {
             >
               <div className="flex items-center justify-between mb-4 border-b border-[#141414] pb-2">
                 <h2 className="font-serif italic text-sm">Camera Configuration</h2>
-                <Settings className="w-3 h-3 opacity-50" />
+                <button 
+                  onClick={() => setShowSettings(false)}
+                  className="text-[#141414] hover:opacity-50"
+                >
+                  ✕
+                </button>
               </div>
               
               <div className="space-y-6">
@@ -969,13 +937,6 @@ export default function SmartBusCCTV() {
           )}
         </div>
       </footer>
-      
-      {/* Visual hint for mobile users (optional - remove if you want it hidden) */}
-      <div className="fixed bottom-20 right-4 opacity-30 md:hidden">
-        <div className="bg-[#141414] text-[#E4E3E0] text-[8px] px-2 py-1 rounded font-mono">
-          Triple tap anywhere
-        </div>
-      </div>
     </div>
   );
 }
