@@ -53,13 +53,102 @@ export default function SmartBusCCTV() {
   const [useSarvam, setUseSarvam] = useState<boolean>(false);
   const [sarvamSpeaker, setSarvamSpeaker] = useState<string>('vidya');
   const [sarvamModel, setSarvamModel] = useState<string>('bulbul:v3');
+  const [cameraPermissionGranted, setCameraPermissionGranted] = useState(false);
+  const [isRequestingPermission, setIsRequestingPermission] = useState(false);
+
+  // Request camera permission on mobile
+  const requestCameraPermission = async () => {
+    setIsRequestingPermission(true);
+    try {
+      // This triggers the permission prompt on mobile
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: true 
+      });
+      
+      // Stop all tracks immediately after getting permission
+      stream.getTracks().forEach(track => track.stop());
+      
+      setCameraPermissionGranted(true);
+      
+      // Now enumerate devices
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = devices.filter(d => d.kind === 'videoinput');
+      setAvailableDevices(videoDevices);
+      
+      return true;
+    } catch (err) {
+      console.error("Camera permission denied:", err);
+      alert("Camera access is required to use this feature. Please allow camera access in your browser settings.");
+      return false;
+    } finally {
+      setIsRequestingPermission(false);
+    }
+  };
+
+  // Fetch available devices - only works after permission
+  const loadDevices = useCallback(async () => {
+    if (typeof window !== 'undefined' && navigator.mediaDevices) {
+      try {
+        // Check if we already have permission
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(d => d.kind === 'videoinput');
+        
+        if (videoDevices.length > 0 && videoDevices[0].label) {
+          // We have permission, devices have labels
+          setAvailableDevices(videoDevices);
+          setCameraPermissionGranted(true);
+        } else {
+          // No permission yet, devices are hidden
+          setAvailableDevices([]);
+          setCameraPermissionGranted(false);
+        }
+      } catch (err) {
+        console.error("Failed to enumerate devices:", err);
+        setAvailableDevices([]);
+      }
+    }
+  }, []);
+
+  // Handle camera selection for a platform
+  const handleCameraSelect = async (platform: number, deviceId: string) => {
+    // Check if we have permission
+    if (!cameraPermissionGranted) {
+      const granted = await requestCameraPermission();
+      if (!granted) return;
+    }
+    
+    // Update the config
+    updateCameraConfig(platform, { type: 'device', value: deviceId });
+    
+    // Test the camera feed
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { deviceId: { exact: deviceId } }
+      });
+      stream.getTracks().forEach(track => track.stop());
+    } catch (err) {
+      console.error("Failed to access selected camera:", err);
+      alert("Cannot access this camera. It might be in use by another app.");
+    }
+  };
+
+  useEffect(() => {
+    loadDevices();
+    
+    // Listen for device changes
+    if (navigator.mediaDevices) {
+      navigator.mediaDevices.addEventListener('devicechange', loadDevices);
+      return () => {
+        navigator.mediaDevices.removeEventListener('devicechange', loadDevices);
+      };
+    }
+  }, [loadDevices]);
 
   useEffect(() => {
     const loadVoices = () => {
       const voices = window.speechSynthesis.getVoices();
       setAvailableVoices(voices);
       
-      // Try to load saved settings from localStorage
       const savedVoice = localStorage.getItem('smart_bus_voice');
       const savedRate = localStorage.getItem('smart_bus_voice_rate');
       const savedPitch = localStorage.getItem('smart_bus_voice_pitch');
@@ -77,7 +166,6 @@ export default function SmartBusCCTV() {
       if (savedSarvamModel) setSarvamModel(savedSarvamModel);
       
       if (!savedVoice) {
-        // Default to Marathi if available
         const marathiVoice = voices.find(v => v.lang === 'mr-IN') || 
                            voices.find(v => v.lang.includes('mr')) || 
                            voices.find(v => v.name.toLowerCase().includes('marathi'));
@@ -93,7 +181,6 @@ export default function SmartBusCCTV() {
     }
   }, []);
 
-  // Load routes from CSV on startup
   const loadRoutes = useCallback(async () => {
     try {
       const response = await fetch('/api/routes');
@@ -112,28 +199,16 @@ export default function SmartBusCCTV() {
     loadRoutes();
   }, [loadRoutes]);
 
-  // Fetch available devices
-  useEffect(() => {
-    if (typeof window !== 'undefined' && navigator.mediaDevices) {
-      navigator.mediaDevices.enumerateDevices().then(devices => {
-        setAvailableDevices(devices.filter(d => d.kind === 'videoinput'));
-      });
-    }
-  }, []);
-
-  // Voice Announcement (Marathi Simulation)
   const announce = useCallback(async (detection: Detection) => {
     if (isMuted || detection.id === 'init' || typeof window === 'undefined') return;
 
     let text = '';
-    // More natural announcement style (Lakshya dya...)
     if (detection.from && detection.to && detection.from !== 'UNKNOWN') {
       text = `कृपया लक्ष द्या, ${detection.from} हून ${detection.to} कडे जाणारी गाडी क्रमांक ${detection.plate}, प्लॅटफॉर्म क्रमांक ${detection.platform} वर येत आहे.`;
     } else {
       text = `कृपया लक्ष द्या, गाडी क्रमांक ${detection.plate}, प्लॅटफॉर्म क्रमांक ${detection.platform} वर येत आहे.`;
     }
 
-    // Use Sarvam AI if enabled and key is provided
     const apiKey = sarvamApiKey || process.env.NEXT_PUBLIC_SARVAM_API_KEY;
     if (useSarvam && apiKey) {
       try {
@@ -145,9 +220,9 @@ export default function SmartBusCCTV() {
           },
           body: JSON.stringify({
             text: text,
-            target_language_code: "mr-IN", // Using Marathi for Sarvam
-            speaker: sarvamSpeaker, // Use selected speaker
-            model: sarvamModel, // Use selected model
+            target_language_code: "mr-IN",
+            speaker: sarvamSpeaker,
+            model: sarvamModel,
             pace: voiceRate,
             speech_sample_rate: 22050,
             output_audio_codec: "mp3",
@@ -161,13 +236,9 @@ export default function SmartBusCCTV() {
           const audio = new Audio(url);
           audio.play();
           return;
-        } else {
-          console.error("Sarvam AI Error:", await response.text());
-          // Fallback to browser TTS if Sarvam fails
         }
       } catch (err) {
         console.error("Sarvam AI Fetch Error:", err);
-        // Fallback to browser TTS
       }
     }
 
@@ -201,7 +272,6 @@ export default function SmartBusCCTV() {
   }, [isMuted, selectedVoiceURI, voiceRate, voicePitch, sarvamApiKey, useSarvam, sarvamSpeaker, sarvamModel]);
 
   const handleCsvImport = async () => {
-    // Improved parser: handle newlines or multiple entries separated by spaces/commas
     const entries = csvInput.split(/[\n\r]+|(?<=\w)\s+(?=[A-Z]{2}\d)/);
     const newDb: Record<string, { from: string; to: string }> = {};
     
@@ -216,9 +286,6 @@ export default function SmartBusCCTV() {
     if (Object.keys(newDb).length > 0) {
       setRouteDb(prev => ({ ...prev, ...newDb }));
       setCsvInput('');
-      
-      // Optional: Try to save to server if we had an endpoint for it
-      // For now, just update local state
       alert(`Successfully imported ${Object.keys(newDb).length} routes!`);
     } else {
       alert("Invalid format. Please use: PLATE, FROM, TO (one per line or separated by space)");
@@ -238,7 +305,6 @@ export default function SmartBusCCTV() {
     const initScheduler = async () => {
       const scheduler = Tesseract.createScheduler();
       
-      // Initialize 2 workers for parallel processing
       const createAndAddWorker = async () => {
         const worker = await Tesseract.createWorker('eng', 1, {
           workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@v5.0.0/dist/worker.min.js',
@@ -246,7 +312,6 @@ export default function SmartBusCCTV() {
           corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@v5.0.0/tesseract-core.wasm.js',
         });
         
-        // Whitelist alphanumeric characters for speed and accuracy
         await worker.setParameters({
           tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
         });
@@ -272,12 +337,10 @@ export default function SmartBusCCTV() {
       const timeOut = new Date().toLocaleTimeString();
       departingBus.timeOut = timeOut;
       
-      // Update detections state to show timeOut
       setDetections(prev => prev.map(d => 
         d.id === departingBus.id ? { ...d, timeOut } : d
       ));
       
-      // Log to CSV on server
       try {
         await fetch('/api/log', {
           method: 'POST',
@@ -299,7 +362,6 @@ export default function SmartBusCCTV() {
     setLastScanTime(new Date());
     
     try {
-      // Find all active video elements AND image elements (for IP cameras)
       const feeds = Array.from(document.querySelectorAll('video, img.object-cover'));
       if (feeds.length === 0) {
         if (!isAuto) alert("No active camera feeds found to scan.");
@@ -307,18 +369,14 @@ export default function SmartBusCCTV() {
         return;
       }
 
-      // Process all feeds in parallel using the scheduler
       await Promise.all(feeds.map(async (feed) => {
-        // Skip if it's not a valid feed (e.g. placeholder images)
         if (feed instanceof HTMLImageElement && !feed.src.startsWith('http')) return;
         if (feed instanceof HTMLImageElement && feed.src.includes('picsum.photos')) return;
 
-        // Find which platform this feed belongs to
         const platformContainer = feed.closest('.relative');
         const platformText = platformContainer?.querySelector('.font-mono.text-\\[9px\\]')?.textContent;
         const platform = platformText ? parseInt(platformText.replace('P', '')) : 1;
 
-        // SPEED OPTIMIZATION: Force a smaller canvas size for OCR
         const canvas = document.createElement('canvas');
         canvas.width = 640;
         canvas.height = 360;
@@ -327,12 +385,10 @@ export default function SmartBusCCTV() {
         if (!ctx) return;
         
         ctx.drawImage(feed as unknown as CanvasImageSource, 0, 0, 640, 360);
-        const imageData = canvas.toDataURL('image/jpeg', 0.6); // Lower quality for speed
+        const imageData = canvas.toDataURL('image/jpeg', 0.6);
 
-        // OCR using scheduler (will automatically pick an available worker)
         const result = await schedulerRef.current!.addJob('recognize', imageData);
         
-        // Clean up the detected text
         const rawText = result.data.text.toUpperCase()
           .replace(/[^A-Z0-9]/g, '')
           .replace(/[OI]/g, (m) => m === 'O' ? '0' : '1')
@@ -343,7 +399,6 @@ export default function SmartBusCCTV() {
           
         setLastOcrResult(rawText);
 
-        // Try to find a plate in the text
         const platesInDb = Object.keys(routeDb);
         let detectedPlate = 'NONE';
 
@@ -400,7 +455,6 @@ export default function SmartBusCCTV() {
           }
         } else if (detectedPlate === 'NONE' || detectedPlate.length < 5) {
           if (activeDetections.current[platform]) {
-            // Immediate departure if plate is not detected (user requested no buffer)
             await handleBusDeparture(platform);
           }
         }
@@ -413,11 +467,9 @@ export default function SmartBusCCTV() {
   }, [isScanning, routeDb, announce, lastDetectedPlates, handleBusDeparture]);
 
   useEffect(() => {
-    // Use setTimeout to avoid synchronous setState in effect (cascading renders)
     const timer = setTimeout(() => {
       setMounted(true);
       
-      // Initial log
       setDetections([{
         id: 'init',
         plate: 'SYSTEM_BOOT',
@@ -431,7 +483,7 @@ export default function SmartBusCCTV() {
       if (autoScan) {
         scanFeeds(true);
       }
-    }, 5000); // Scan every 5 seconds in auto mode
+    }, 5000);
 
     return () => {
       clearTimeout(timer);
@@ -445,7 +497,6 @@ export default function SmartBusCCTV() {
         c.platform === platform ? { ...c, ...config } : c
       );
       
-      // If camera is disabled, trigger departure for any bus on this platform
       const updatedConfig = newConfigs.find(c => c.platform === platform);
       if (updatedConfig?.type === 'none' && activeDetections.current[platform]) {
         handleBusDeparture(platform);
@@ -457,7 +508,6 @@ export default function SmartBusCCTV() {
 
   return (
     <div className="min-h-screen bg-[#E4E3E0] text-[#141414] font-sans selection:bg-[#141414] selection:text-[#E4E3E0]">
-      {/* Header */}
       <header className="border-b border-[#141414] p-4 flex justify-between items-center bg-[#E4E3E0] sticky top-0 z-50">
         <div className="flex items-center gap-3">
           <div className="bg-[#141414] p-2 rounded-sm">
@@ -532,7 +582,6 @@ export default function SmartBusCCTV() {
               {isScanning && !autoScan ? 'SCANNING...' : 'SCAN ONCE'}
             </button>
             
-            {/* SETTINGS BUTTON - Always visible on mobile and desktop */}
             <button 
               onClick={() => setShowSettings(!showSettings)}
               className={`flex items-center gap-2 px-4 py-2 border border-[#141414] transition-colors font-mono text-xs ${showSettings ? 'bg-[#141414] text-[#E4E3E0]' : 'hover:bg-[#141414] hover:text-[#E4E3E0]'}`}
@@ -541,25 +590,22 @@ export default function SmartBusCCTV() {
               SETTINGS
             </button>
             
-            {/* CLEAR LOG button - Only visible when settings is open */}
             {showSettings && (
-              <button 
-                onClick={() => setDetections([])}
-                className="flex items-center gap-2 px-4 py-2 border border-[#141414] hover:bg-red-600 hover:text-white transition-colors font-mono text-xs"
-              >
-                CLEAR LOG
-              </button>
-            )}
-            
-            {/* PYTHON SOURCE button - Only visible when settings is open */}
-            {showSettings && (
-              <button 
-                onClick={() => setShowSource(!showSource)}
-                className="flex items-center gap-2 px-4 py-2 border border-[#141414] hover:bg-[#141414] hover:text-[#E4E3E0] transition-colors font-mono text-xs"
-              >
-                <Code className="w-4 h-4" />
-                {showSource ? 'VIEW CCTV' : 'PYTHON SOURCE'}
-              </button>
+              <>
+                <button 
+                  onClick={() => setDetections([])}
+                  className="flex items-center gap-2 px-4 py-2 border border-[#141414] hover:bg-red-600 hover:text-white transition-colors font-mono text-xs"
+                >
+                  CLEAR LOG
+                </button>
+                <button 
+                  onClick={() => setShowSource(!showSource)}
+                  className="flex items-center gap-2 px-4 py-2 border border-[#141414] hover:bg-[#141414] hover:text-[#E4E3E0] transition-colors font-mono text-xs"
+                >
+                  <Code className="w-4 h-4" />
+                  {showSource ? 'VIEW CCTV' : 'PYTHON SOURCE'}
+                </button>
+              </>
             )}
             
             <button 
@@ -573,7 +619,6 @@ export default function SmartBusCCTV() {
       </header>
 
       <main className="p-4 grid grid-cols-1 lg:grid-cols-12 gap-4">
-        {/* Left Column: Camera Grid or Source */}
         <div className="lg:col-span-8 space-y-4">
           <AnimatePresence mode="wait">
             {showSource ? (
@@ -603,7 +648,6 @@ export default function SmartBusCCTV() {
           </AnimatePresence>
         </div>
 
-        {/* Right Column: Logs & Settings */}
         <div className="lg:col-span-4 space-y-4">
           {showSettings ? (
             <motion.div 
@@ -622,6 +666,24 @@ export default function SmartBusCCTV() {
               </div>
               
               <div className="space-y-6">
+                {/* Camera Permission Button for Mobile */}
+                {!cameraPermissionGranted && (
+                  <div className="space-y-3 border-b border-[#141414] pb-6">
+                    <div className="bg-amber-50 border border-amber-500 p-3 rounded">
+                      <p className="text-[10px] font-mono text-amber-800 mb-2">
+                        ⚠️ Camera permission required to select devices
+                      </p>
+                      <button
+                        onClick={requestCameraPermission}
+                        disabled={isRequestingPermission}
+                        className="w-full bg-[#141414] text-[#E4E3E0] py-2 font-mono text-[10px] uppercase tracking-widest hover:bg-black transition-colors"
+                      >
+                        {isRequestingPermission ? 'REQUESTING...' : 'ALLOW CAMERA ACCESS'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Voice Selection Section */}
                 <div className="space-y-3 border-b border-[#141414] pb-6">
                   <div className="flex items-center justify-between">
@@ -630,7 +692,6 @@ export default function SmartBusCCTV() {
                   </div>
                   
                   <div className="space-y-4">
-                    {/* Sarvam AI Toggle */}
                     <div className="flex items-center justify-between bg-white border border-[#141414] p-2">
                       <label className="text-[10px] font-mono font-bold uppercase">Use Sarvam AI (High Quality)</label>
                       <input 
@@ -645,7 +706,7 @@ export default function SmartBusCCTV() {
                     </div>
 
                     {useSarvam && (
-                      <div className="space-y-2 animate-in fade-in slide-in-from-top-1">
+                      <div className="space-y-2">
                         <div className="space-y-1">
                           <label className="text-[9px] font-mono uppercase opacity-60">Sarvam API Key</label>
                           <input 
@@ -811,19 +872,29 @@ export default function SmartBusCCTV() {
 
                     {config.type === 'device' && (
                       <div className="space-y-1">
-                        <select 
-                          value={config.value}
-                          onChange={(e) => updateCameraConfig(config.platform, { value: e.target.value })}
-                          className="w-full bg-white border border-[#141414] text-[10px] font-mono px-2 py-2"
-                        >
-                          <option value="">SELECT CAMERA...</option>
-                          {availableDevices.map(device => (
-                            <option key={device.deviceId} value={device.deviceId}>{device.label || `Camera ${device.deviceId.slice(0, 5)}`}</option>
-                          ))}
-                        </select>
+                        {availableDevices.length === 0 ? (
+                          <div className="bg-amber-50 border border-amber-500 p-2 rounded">
+                            <p className="text-[9px] font-mono text-amber-800">
+                              No cameras found. Click "ALLOW CAMERA ACCESS" above first.
+                            </p>
+                          </div>
+                        ) : (
+                          <select 
+                            value={config.value}
+                            onChange={(e) => handleCameraSelect(config.platform, e.target.value)}
+                            className="w-full bg-white border border-[#141414] text-[10px] font-mono px-2 py-2"
+                          >
+                            <option value="">SELECT CAMERA...</option>
+                            {availableDevices.map(device => (
+                              <option key={device.deviceId} value={device.deviceId}>
+                                {device.label || `Camera ${device.deviceId.slice(0, 10)}...`}
+                              </option>
+                            ))}
+                          </select>
+                        )}
                         {config.value && cameraConfigs.filter(c => c.type === 'device' && c.value === config.value).length > 1 && (
                           <p className="text-[9px] text-amber-600 font-mono leading-tight">
-                            ⚠️ This camera is already in use by another platform. Most cameras only support one stream at a time.
+                            ⚠️ This camera is already in use by another platform.
                           </p>
                         )}
                       </div>
@@ -871,7 +942,6 @@ export default function SmartBusCCTV() {
         </div>
       </main>
 
-      {/* Footer Status Bar */}
       <footer className="fixed bottom-0 w-full border-t border-[#141414] bg-[#E4E3E0] px-4 py-1 flex justify-between items-center font-mono text-[9px] uppercase tracking-tighter opacity-70">
         <div className="flex gap-4">
           <span>LATENCY: 42MS</span>
